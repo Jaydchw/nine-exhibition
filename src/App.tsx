@@ -8,7 +8,10 @@ import {
   MotionValue,
   type AnimationPlaybackControls,
 } from "framer-motion";
-import { CaretDown } from "@phosphor-icons/react";
+import { CalendarPlus, CaretDown } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { artistsWithSlugs } from "./lib/artists";
+import ActionButton from "./components/ActionButton";
 
 const IDLE_AMPLITUDE = 60;
 const MOUSE_REPEL_STRENGTH = 1.6;
@@ -549,12 +552,15 @@ export default function App() {
 
     window.addEventListener("mousemove", handleMove);
 
+    const idleControls = idleControlsRef.current;
+    const idleRestart = idleRestartRef.current;
+
     return () => {
       controls.forEach((c) => c.stop());
       if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener("mousemove", handleMove);
-      idleControlsRef.current.clear();
-      idleRestartRef.current.clear();
+      idleControls.clear();
+      idleRestart.clear();
     };
   }, [gridItems, mouseX, mouseY, isMobile, idleAmplitude, mobilePhases]);
 
@@ -597,9 +603,21 @@ export default function App() {
   const gooMatrix = isMobile ? MOBILE_GOO_MATRIX : DESKTOP_GOO_MATRIX;
   const glowDilate = isMobile ? MOBILE_GLOW_DILATE : DESKTOP_GLOW_DILATE;
   const glowBlur = isMobile ? MOBILE_GLOW_BLUR : DESKTOP_GLOW_BLUR;
+  const calendarUrl = useMemo(() => {
+    const url = new URL("https://calendar.google.com/calendar/render");
+    url.searchParams.set("action", "TEMPLATE");
+    url.searchParams.set("text", "NINE Exhibition");
+    url.searchParams.set("dates", "20260611T173000/20260611T193000");
+    url.searchParams.set(
+      "details",
+      "The NINE exhibition is curated by nine level five degree students studying at Hull College.",
+    );
+    url.searchParams.set("location", "Hull College, HU1 3DG");
+    return url.toString();
+  }, []);
 
   return (
-    <div ref={containerRef} className="relative w-full bg-white">
+    <div ref={containerRef} className="relative w-full bg-[#f7f4ef]">
       <style>{`
         @font-face {
           font-family: 'Gunplay';
@@ -609,7 +627,7 @@ export default function App() {
 
       <div className="grain-overlay" />
 
-      <div className="relative w-full h-screen bg-white isolate overflow-hidden">
+      <div className="relative w-full h-screen bg-[#f7f4ef] isolate overflow-hidden">
         <motion.div
           style={{ opacity: heroOpacity }}
           className="absolute inset-0"
@@ -836,15 +854,64 @@ export default function App() {
       <motion.div
         ref={contentRef}
         style={{ opacity: contentOpacity }}
-        className="relative min-h-screen bg-white z-50 px-8 py-24"
+        className="relative min-h-screen bg-[#f7f4ef] z-50 px-6 py-16 md:px-10 md:py-24"
+        id="exhibition"
       >
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-4xl md:text-6xl font-bold mb-8">
-            Content Section
-          </h2>
-          <p className="text-lg md:text-xl text-neutral-700 mb-6">
-            This is placeholder content that appears when you scroll down.
+          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between mb-8">
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] font-semibold text-neutral-500">
+                Exhibition
+              </p>
+              <h2 className="text-4xl md:text-6xl font-black uppercase tracking-[0.08em]">
+                Nine Exhibition
+              </h2>
+              <p className="text-base md:text-lg italic text-neutral-600 mt-3">
+                Hull College <span className="font-semibold">HU1 3DG</span>
+              </p>
+            </div>
+            <ActionButton
+              as="a"
+              href={calendarUrl}
+              target="_blank"
+              rel="noreferrer"
+              size="md"
+              className="tracking-[0.3em]"
+              aria-label="Add NINE Exhibition to calendar"
+            >
+              <CalendarPlus size={18} />
+              Add to calendar
+            </ActionButton>
+          </div>
+          <p className="text-base md:text-xl text-neutral-800 leading-relaxed mb-12">
+            The NINE exhibition is curated by nine level five degree students
+            studying at Hull College. This exhibition is a cumulation of our end
+            of year studies and exhibits our progress and passions. Come visit
+            us at Hull College <span className="font-semibold">HU1 3DG</span> on
+            the <span className="font-semibold">11th June 5:30</span>.
           </p>
+
+          <h3 className="text-2xl md:text-3xl font-black uppercase tracking-widest mb-5">
+            Meet the Artists
+          </h3>
+          <ul className="grid gap-3 text-base md:text-lg text-neutral-900">
+            {artistsWithSlugs.map((artist) => (
+              <li key={artist.slug}>
+                <ActionButton
+                  as={Link}
+                  to={`/artists/${artist.slug}`}
+                  size="md"
+                  align="between"
+                  className="tracking-[0.08em]"
+                >
+                  <span className="flex-1 text-left">{artist.name}</span>
+                  <span className="text-xs tracking-[0.3em] text-right">
+                    View
+                  </span>
+                </ActionButton>
+              </li>
+            ))}
+          </ul>
         </div>
       </motion.div>
     </div>
