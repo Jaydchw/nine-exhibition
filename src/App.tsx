@@ -11,7 +11,7 @@ import {
 import { CaretDown } from "@phosphor-icons/react";
 
 const IDLE_AMPLITUDE = 60;
-const MOUSE_REPEL_STRENGTH = 2.5;
+const MOUSE_REPEL_STRENGTH = 1.6;
 const SEGMENT_VARIANCE_BASE = 0.97;
 const SEGMENT_VARIANCE_RANGE = 0.06;
 const BRIDGE_TAPER_BASE = 0.1;
@@ -32,21 +32,23 @@ const SPACING_MOBILE = 150;
 const MOBILE_SPACING_FACTOR = 0.5;
 const MOBILE_BALL_SIZE_FACTOR = 0.18;
 const MOBILE_IDLE_AMPLITUDE = 20;
-const MOBILE_SEGMENT_COUNT = 40;
+const MOBILE_SEGMENT_COUNT = 24;
 const BRIDGE_CENTER_BOOST_MOBILE = 0.14;
 const BRIDGE_END_SCALE_MOBILE = 0.32;
-const MOBILE_SIM_BOOST_START = 2.4;
-const MOBILE_SIM_BOOST_DECAY = 1.4;
-const MOBILE_SIM_BOOST_DURATION = 1;
-const MOBILE_SIM_SWAY_MULTIPLIER = 0.42;
-const MOBILE_SIM_FREQ_X = 0.0015;
-const MOBILE_SIM_FREQ_Y = 0.0013;
-const MOBILE_SIM_SPRING = 0.99;
-const MOBILE_SIM_DAMPING = 0.86;
-const MOBILE_GOO_BLUR = 24;
+const MOBILE_INTRO_DURATION = 3.2;
+const MOBILE_INTRO_SPRING_SCALE = 0.35;
+const MOBILE_SIM_BOOST_START = 1.4;
+const MOBILE_SIM_BOOST_DECAY = 0.2;
+const MOBILE_SIM_BOOST_DURATION = 2.5;
+const MOBILE_SIM_SWAY_MULTIPLIER = 0.35;
+const MOBILE_SIM_FREQ_X = 0.0012;
+const MOBILE_SIM_FREQ_Y = 0.0011;
+const MOBILE_SIM_SPRING = 0.01;
+const MOBILE_SIM_DAMPING = 0.92;
+const MOBILE_GOO_BLUR = 20;
 const MOBILE_GOO_MATRIX = "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 28 -6";
 const MOBILE_GLOW_DILATE = 5;
-const MOBILE_GLOW_BLUR = 40;
+const MOBILE_GLOW_BLUR = 32;
 
 const pseudoRandom = (index: number, seed: number) => {
   const value = Math.sin(index * 12.9898 + seed) * 43758.5453;
@@ -92,34 +94,56 @@ interface BallProps {
   x: MotionValue<number>;
   y: MotionValue<number>;
   ballSize: number;
+  enableDistort?: boolean;
+  onPointerDown?: (event: React.PointerEvent) => void;
+  onPointerMove?: (event: React.PointerEvent) => void;
+  onPointerUp?: (event: React.PointerEvent) => void;
+  onPointerCancel?: (event: React.PointerEvent) => void;
 }
 
-function Ball({ x, y, ballSize }: BallProps) {
+function Ball({
+  x,
+  y,
+  ballSize,
+  enableDistort = true,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+}: BallProps) {
   const scaleX = useSpring(1, { stiffness: 400, damping: 15 });
   const scaleY = useSpring(1, { stiffness: 400, damping: 15 });
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    if (enableDistort) {
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
 
-    const distortX = 1 + (clickX - centerX) / 100;
-    const distortY = 1 + (clickY - centerY) / 100;
-    scaleX.set(distortX);
-    scaleY.set(distortY);
+      const distortX = 1 + (clickX - centerX) / 100;
+      const distortY = 1 + (clickY - centerY) / 100;
+      scaleX.set(distortX);
+      scaleY.set(distortY);
+    }
+    onPointerMove?.(e);
   };
 
   const handlePointerLeave = () => {
-    scaleX.set(1);
-    scaleY.set(1);
+    if (enableDistort) {
+      scaleX.set(1);
+      scaleY.set(1);
+    }
   };
 
   return (
     <motion.div
       className="absolute rounded-full"
+      onPointerDown={onPointerDown}
       onPointerMove={handlePointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onPointerLeave={handlePointerLeave}
       style={{
         width: ballSize,
@@ -359,6 +383,21 @@ export default function App() {
   const [hasScrolled, setHasScrolled] = useState(false);
   const mouseX = useSpring(0, { stiffness: 120, damping: 20 });
   const mouseY = useSpring(0, { stiffness: 120, damping: 20 });
+  const dragState = useRef<{
+    id: number | null;
+    offsetX: number;
+    offsetY: number;
+    pointerId: number | null;
+  }>({ id: null, offsetX: 0, offsetY: 0, pointerId: null });
+  const wasMobileRef = useRef(false);
+  const mobileIntroStartRef = useRef<number | null>(null);
+  const idleRestartRef = useRef(new Map<number, () => void>());
+  const idleControlsRef = useRef(
+    new Map<
+      number,
+      { x?: AnimationPlaybackControls; y?: AnimationPlaybackControls }
+    >(),
+  );
 
   const segmentCount = isMobile ? MOBILE_SEGMENT_COUNT : DESKTOP_SEGMENT_COUNT;
   const segmentTs = useMemo(() => {
@@ -378,6 +417,10 @@ export default function App() {
   );
 
   const gridItems = useGridItems(spacing);
+  const itemById = useMemo(
+    () => new Map(gridItems.map((item) => [item.id, item])),
+    [gridItems],
+  );
   const mobilePhases = useMemo(
     () =>
       gridItems.map((_, index) => ({
@@ -387,6 +430,22 @@ export default function App() {
     [gridItems],
   );
   const idleAmplitude = isMobile ? MOBILE_IDLE_AMPLITUDE : IDLE_AMPLITUDE;
+
+  useEffect(() => {
+    if (isMobile && !wasMobileRef.current) {
+      gridItems.forEach((item) => {
+        item.x.set(item.ix * SPACING_DESKTOP);
+        item.y.set(item.iy * SPACING_DESKTOP);
+      });
+      mobileIntroStartRef.current = performance.now();
+    }
+
+    if (!isMobile && wasMobileRef.current) {
+      mobileIntroStartRef.current = null;
+    }
+
+    wasMobileRef.current = isMobile;
+  }, [isMobile, gridItems]);
 
   useEffect(() => {
     const controls: AnimationPlaybackControls[] = [];
@@ -401,9 +460,25 @@ export default function App() {
           elapsed < MOBILE_SIM_BOOST_DURATION
             ? MOBILE_SIM_BOOST_START - elapsed * MOBILE_SIM_BOOST_DECAY
             : 1;
+        const introStart = mobileIntroStartRef.current;
+        const introProgress = introStart
+          ? Math.min(
+              1,
+              Math.max(0, (time - introStart) / (MOBILE_INTRO_DURATION * 1000)),
+            )
+          : 1;
+        const introEase = 1 - Math.pow(1 - introProgress, 3);
+        const introScale =
+          MOBILE_INTRO_SPRING_SCALE +
+          (1 - MOBILE_INTRO_SPRING_SCALE) * introEase;
         const sway = idleAmplitude * MOBILE_SIM_SWAY_MULTIPLIER;
 
         gridItems.forEach((item, index) => {
+          if (dragState.current.id === item.id) {
+            velocities[index].x = 0;
+            velocities[index].y = 0;
+            return;
+          }
           const phase = mobilePhases[index];
           const targetX =
             item.baseX + Math.sin(time * MOBILE_SIM_FREQ_X + phase.x) * sway;
@@ -413,7 +488,7 @@ export default function App() {
           const vy = velocities[index].y;
           const dx = targetX - item.x.get();
           const dy = targetY - item.y.get();
-          const spring = MOBILE_SIM_SPRING * boost;
+          const spring = MOBILE_SIM_SPRING * boost * introScale;
           velocities[index].x = (vx + dx * spring) * MOBILE_SIM_DAMPING;
           velocities[index].y = (vy + dy * spring) * MOBILE_SIM_DAMPING;
           item.x.set(item.x.get() + velocities[index].x);
@@ -427,6 +502,7 @@ export default function App() {
     } else {
       gridItems.forEach((item) => {
         const animateIdle = () => {
+          if (dragState.current.id === item.id) return;
           const randomX = item.baseX + (Math.random() - 0.5) * idleAmplitude;
           const randomY = item.baseY + (Math.random() - 0.5) * idleAmplitude;
 
@@ -434,6 +510,8 @@ export default function App() {
 
           const cx = animate(item.x, randomX, { duration, ease: "easeInOut" });
           const cy = animate(item.y, randomY, { duration, ease: "easeInOut" });
+
+          idleControlsRef.current.set(item.id, { x: cx, y: cy });
 
           controls.push(cx);
           controls.push(cy);
@@ -443,6 +521,7 @@ export default function App() {
           });
         };
 
+        idleRestartRef.current.set(item.id, animateIdle);
         animateIdle();
       });
     }
@@ -455,6 +534,7 @@ export default function App() {
       mouseY.set(my);
 
       gridItems.forEach((item) => {
+        if (dragState.current.id === item.id) return;
         const dx = mx - item.x.get();
         const dy = my - item.y.get();
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -473,6 +553,8 @@ export default function App() {
       controls.forEach((c) => c.stop());
       if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener("mousemove", handleMove);
+      idleControlsRef.current.clear();
+      idleRestartRef.current.clear();
     };
   }, [gridItems, mouseX, mouseY, isMobile, idleAmplitude, mobilePhases]);
 
@@ -642,10 +724,72 @@ export default function App() {
 
           <div
             className="absolute inset-0 w-full h-full z-10"
-            style={{ filter: "url(#smart-goo)" }}
+            style={{ filter: "url(#smart-goo)", willChange: "transform" }}
           >
             {gridItems.map((item) => (
-              <Ball key={item.id} x={item.x} y={item.y} ballSize={ballSize} />
+              <Ball
+                key={item.id}
+                x={item.x}
+                y={item.y}
+                ballSize={ballSize}
+                enableDistort={!isMobile}
+                onPointerDown={(event) => {
+                  const target = event.currentTarget as HTMLElement;
+                  const mx = event.clientX - window.innerWidth / 2;
+                  const my = event.clientY - window.innerHeight / 2;
+                  dragState.current = {
+                    id: item.id,
+                    offsetX: mx - item.x.get(),
+                    offsetY: my - item.y.get(),
+                    pointerId: event.pointerId,
+                  };
+                  if (!isMobile) {
+                    const idle = idleControlsRef.current.get(item.id);
+                    idle?.x?.stop();
+                    idle?.y?.stop();
+                  }
+                  target.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                  if (dragState.current.id !== item.id) return;
+                  const mx = event.clientX - window.innerWidth / 2;
+                  const my = event.clientY - window.innerHeight / 2;
+                  const current = itemById.get(item.id);
+                  if (!current) return;
+                  current.x.set(mx - dragState.current.offsetX);
+                  current.y.set(my - dragState.current.offsetY);
+                }}
+                onPointerUp={(event) => {
+                  const target = event.currentTarget as HTMLElement;
+                  if (dragState.current.pointerId === event.pointerId) {
+                    target.releasePointerCapture(event.pointerId);
+                  }
+                  dragState.current = {
+                    id: null,
+                    offsetX: 0,
+                    offsetY: 0,
+                    pointerId: null,
+                  };
+                  if (!isMobile) {
+                    idleRestartRef.current.get(item.id)?.();
+                  }
+                }}
+                onPointerCancel={(event) => {
+                  const target = event.currentTarget as HTMLElement;
+                  if (dragState.current.pointerId === event.pointerId) {
+                    target.releasePointerCapture(event.pointerId);
+                  }
+                  dragState.current = {
+                    id: null,
+                    offsetX: 0,
+                    offsetY: 0,
+                    pointerId: null,
+                  };
+                  if (!isMobile) {
+                    idleRestartRef.current.get(item.id)?.();
+                  }
+                }}
+              />
             ))}
 
             {bridges.map((bridge) => (
@@ -681,6 +825,7 @@ export default function App() {
             className="text-[15vw] font-bold leading-none select-none text-white tracking-[0.5em]"
             style={{
               fontFamily: "Gunplay, sans-serif",
+              filter: "blur(0.5px)",
             }}
           >
             NINE
