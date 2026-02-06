@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useState,
-  useRef,
-  type ComponentProps,
-  useMemo,
-} from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   motion,
   useSpring,
@@ -12,16 +6,52 @@ import {
   useTransform,
   animate,
   MotionValue,
+  type AnimationPlaybackControls,
 } from "framer-motion";
-import { cn } from "./lib/utils";
-import { ArrowClockwise, CaretDown } from "@phosphor-icons/react";
+import { CaretDown } from "@phosphor-icons/react";
+
+const IDLE_AMPLITUDE = 60;
+const MOUSE_REPEL_STRENGTH = 2.5;
+const SEGMENT_VARIANCE_BASE = 0.97;
+const SEGMENT_VARIANCE_RANGE = 0.06;
+const BRIDGE_TAPER_BASE = 0.1;
+const BRIDGE_TAPER_EXP = 0.7;
 
 const BALL_SIZE_DESKTOP = 150;
 const SPACING_DESKTOP = 340;
+const DESKTOP_SEGMENT_COUNT = 24;
+const BRIDGE_CENTER_BOOST_DESKTOP = 0.08;
+const BRIDGE_END_SCALE_DESKTOP = 0.4;
+const DESKTOP_GOO_BLUR = 48;
+const DESKTOP_GOO_MATRIX = "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 55 -12";
+const DESKTOP_GLOW_DILATE = 10;
+const DESKTOP_GLOW_BLUR = 42;
+
 const BALL_SIZE_MOBILE = 70;
-const SPACING_MOBILE = 180;
-const IDLE_AMPLITUDE = 60;
-const MOUSE_REPEL_STRENGTH = 2.5;
+const SPACING_MOBILE = 150;
+const MOBILE_SPACING_FACTOR = 0.5;
+const MOBILE_BALL_SIZE_FACTOR = 0.18;
+const MOBILE_IDLE_AMPLITUDE = 20;
+const MOBILE_SEGMENT_COUNT = 40;
+const BRIDGE_CENTER_BOOST_MOBILE = 0.14;
+const BRIDGE_END_SCALE_MOBILE = 0.32;
+const MOBILE_SIM_BOOST_START = 2.4;
+const MOBILE_SIM_BOOST_DECAY = 1.4;
+const MOBILE_SIM_BOOST_DURATION = 1;
+const MOBILE_SIM_SWAY_MULTIPLIER = 0.42;
+const MOBILE_SIM_FREQ_X = 0.0015;
+const MOBILE_SIM_FREQ_Y = 0.0013;
+const MOBILE_SIM_SPRING = 0.99;
+const MOBILE_SIM_DAMPING = 0.86;
+const MOBILE_GOO_BLUR = 24;
+const MOBILE_GOO_MATRIX = "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 28 -6";
+const MOBILE_GLOW_DILATE = 5;
+const MOBILE_GLOW_BLUR = 40;
+
+const pseudoRandom = (index: number, seed: number) => {
+  const value = Math.sin(index * 12.9898 + seed) * 43758.5453;
+  return value - Math.floor(value);
+};
 
 const useResponsiveValues = () => {
   const [values, setValues] = useState({
@@ -37,8 +67,8 @@ const useResponsiveValues = () => {
 
       if (isMobile) {
         setValues({
-          spacing: Math.min(width * 0.45, SPACING_MOBILE),
-          ballSize: Math.min(width * 0.2, BALL_SIZE_MOBILE),
+          spacing: Math.min(width * MOBILE_SPACING_FACTOR, SPACING_MOBILE),
+          ballSize: Math.min(width * MOBILE_BALL_SIZE_FACTOR, BALL_SIZE_MOBILE),
           isMobile: true,
         });
       } else {
@@ -56,27 +86,6 @@ const useResponsiveValues = () => {
   }, []);
 
   return values;
-};
-
-interface ButtonProps extends ComponentProps<"button"> {
-  variant?: "default" | "outline";
-}
-
-const Button = ({ className, variant = "default", ...props }: ButtonProps) => {
-  const variants: Record<string, string> = {
-    default: "bg-black text-white hover:bg-neutral-800",
-    outline: "border border-black text-black hover:bg-black/10",
-  };
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 transition-colors cursor-pointer",
-        variants[variant],
-        className,
-      )}
-      {...props}
-    />
-  );
 };
 
 interface BallProps {
@@ -159,6 +168,7 @@ interface BridgeProps {
   ballSize: number;
   segmentTs: number[];
   segmentVariance: number[];
+  isMobile: boolean;
 }
 
 interface BridgeSegmentProps {
@@ -172,6 +182,7 @@ interface BridgeSegmentProps {
   sizeVariance: number;
   ballSize: number;
   opacity: MotionValue<number>;
+  isMobile: boolean;
 }
 
 function BridgeSegment({
@@ -185,14 +196,22 @@ function BridgeSegment({
   sizeVariance,
   ballSize,
   opacity,
+  isMobile,
 }: BridgeSegmentProps) {
   const segX = useTransform([ax, bx], ([a, b]: number[]) => a + (b - a) * t);
   const segY = useTransform([ay, by], ([a, b]: number[]) => a + (b - a) * t);
 
   const tFromCenter = Math.abs(2 * t - 1);
-  // Stringier taper: slightly thicker center so bridges connect
-  const centerBoost = 0.06 * (1 - tFromCenter);
-  const taper = 0.1 + 0.4 * Math.pow(tFromCenter, 0.7) + centerBoost;
+  const centerBoost =
+    (isMobile ? BRIDGE_CENTER_BOOST_MOBILE : BRIDGE_CENTER_BOOST_DESKTOP) *
+    (1 - tFromCenter);
+  const endScale = isMobile
+    ? BRIDGE_END_SCALE_MOBILE
+    : BRIDGE_END_SCALE_DESKTOP;
+  const taper =
+    BRIDGE_TAPER_BASE +
+    endScale * Math.pow(tFromCenter, BRIDGE_TAPER_EXP) +
+    centerBoost;
   const size = ballSize * taper * sizeVariance;
 
   const bridgeDx = useTransform([ax, bx], ([a, b]: number[]) => b - a);
@@ -217,7 +236,10 @@ function BridgeSegment({
       return Math.max(0, 1 - dist / 500);
     },
   );
-  const offsetMag = useTransform(mouseForce, (f: number) => f * 18);
+  const offsetMag = useTransform(
+    mouseForce,
+    (f: number) => f * (isMobile ? 0 : 18),
+  );
   const offsetX = useTransform(
     [normalX, offsetMag],
     ([nx, mag]: number[]) => nx * mag,
@@ -258,6 +280,7 @@ function DiagonalBridge({
   ballSize,
   segmentTs,
   segmentVariance,
+  isMobile,
 }: BridgeProps) {
   const distance = useTransform(
     [ax, ay, bx, by],
@@ -285,6 +308,7 @@ function DiagonalBridge({
           sizeVariance={segmentVariance[i]}
           ballSize={ballSize}
           opacity={opacity}
+          isMobile={isMobile}
         />
       ))}
     </>
@@ -322,14 +346,7 @@ function useGridItems(spacing: number) {
       baseX: pos.ix * spacing,
       baseY: pos.iy * spacing,
     }));
-  }, []);
-
-  useEffect(() => {
-    items.forEach((item) => {
-      item.baseX = item.ix * spacing;
-      item.baseY = item.iy * spacing;
-    });
-  }, [spacing, items]);
+  }, [spacing]);
 
   return items;
 }
@@ -343,7 +360,7 @@ export default function App() {
   const mouseX = useSpring(0, { stiffness: 120, damping: 20 });
   const mouseY = useSpring(0, { stiffness: 120, damping: 20 });
 
-  const segmentCount = isMobile ? 34 : 24;
+  const segmentCount = isMobile ? MOBILE_SEGMENT_COUNT : DESKTOP_SEGMENT_COUNT;
   const segmentTs = useMemo(() => {
     const step = 1 / (segmentCount + 1);
     return Array.from({ length: segmentCount }, (_, i) =>
@@ -351,36 +368,84 @@ export default function App() {
     );
   }, [segmentCount]);
   const segmentVariance = useMemo(
-    () => segmentTs.map(() => 0.97 + Math.random() * 0.06),
+    () =>
+      segmentTs.map(
+        (_, index) =>
+          SEGMENT_VARIANCE_BASE +
+          pseudoRandom(index, 0.13) * SEGMENT_VARIANCE_RANGE,
+      ),
     [segmentTs],
   );
 
   const gridItems = useGridItems(spacing);
+  const mobilePhases = useMemo(
+    () =>
+      gridItems.map((_, index) => ({
+        x: pseudoRandom(index, 1.23) * Math.PI * 2,
+        y: pseudoRandom(index, 4.56) * Math.PI * 2,
+      })),
+    [gridItems],
+  );
+  const idleAmplitude = isMobile ? MOBILE_IDLE_AMPLITUDE : IDLE_AMPLITUDE;
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const controls: any[] = [];
+    const controls: AnimationPlaybackControls[] = [];
+    let rafId: number | null = null;
+    const startTime = performance.now();
 
-    gridItems.forEach((item) => {
-      const animateIdle = () => {
-        const randomX = item.baseX + (Math.random() - 0.5) * IDLE_AMPLITUDE;
-        const randomY = item.baseY + (Math.random() - 0.5) * IDLE_AMPLITUDE;
+    if (isMobile) {
+      const velocities = gridItems.map(() => ({ x: 0, y: 0 }));
+      const tick = (time: number) => {
+        const elapsed = (time - startTime) / 1000;
+        const boost =
+          elapsed < MOBILE_SIM_BOOST_DURATION
+            ? MOBILE_SIM_BOOST_START - elapsed * MOBILE_SIM_BOOST_DECAY
+            : 1;
+        const sway = idleAmplitude * MOBILE_SIM_SWAY_MULTIPLIER;
 
-        const duration = 2 + Math.random() * 3;
-
-        const cx = animate(item.x, randomX, { duration, ease: "easeInOut" });
-        const cy = animate(item.y, randomY, { duration, ease: "easeInOut" });
-
-        controls.push(cx);
-        controls.push(cy);
-
-        cx.then(() => {
-          if (controls.includes(cx)) animateIdle();
+        gridItems.forEach((item, index) => {
+          const phase = mobilePhases[index];
+          const targetX =
+            item.baseX + Math.sin(time * MOBILE_SIM_FREQ_X + phase.x) * sway;
+          const targetY =
+            item.baseY + Math.cos(time * MOBILE_SIM_FREQ_Y + phase.y) * sway;
+          const vx = velocities[index].x;
+          const vy = velocities[index].y;
+          const dx = targetX - item.x.get();
+          const dy = targetY - item.y.get();
+          const spring = MOBILE_SIM_SPRING * boost;
+          velocities[index].x = (vx + dx * spring) * MOBILE_SIM_DAMPING;
+          velocities[index].y = (vy + dy * spring) * MOBILE_SIM_DAMPING;
+          item.x.set(item.x.get() + velocities[index].x);
+          item.y.set(item.y.get() + velocities[index].y);
         });
+
+        rafId = requestAnimationFrame(tick);
       };
 
-      animateIdle();
-    });
+      rafId = requestAnimationFrame(tick);
+    } else {
+      gridItems.forEach((item) => {
+        const animateIdle = () => {
+          const randomX = item.baseX + (Math.random() - 0.5) * idleAmplitude;
+          const randomY = item.baseY + (Math.random() - 0.5) * idleAmplitude;
+
+          const duration = 2 + Math.random() * 3;
+
+          const cx = animate(item.x, randomX, { duration, ease: "easeInOut" });
+          const cy = animate(item.y, randomY, { duration, ease: "easeInOut" });
+
+          controls.push(cx);
+          controls.push(cy);
+
+          cx.then(() => {
+            if (controls.includes(cx)) animateIdle();
+          });
+        };
+
+        animateIdle();
+      });
+    }
 
     const handleMove = (e: MouseEvent) => {
       const mx = e.clientX - window.innerWidth / 2;
@@ -406,13 +471,13 @@ export default function App() {
 
     return () => {
       controls.forEach((c) => c.stop());
+      if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener("mousemove", handleMove);
     };
-  }, [gridItems, mouseX, mouseY]);
+  }, [gridItems, mouseX, mouseY, isMobile, idleAmplitude, mobilePhases]);
 
   const bridges = useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pairs: any[] = [];
+    const pairs: { id: string; p1: GridItem; p2: GridItem }[] = [];
     for (let i = 0; i < gridItems.length; i++) {
       for (let j = i + 1; j < gridItems.length; j++) {
         const p1 = gridItems[i];
@@ -446,12 +511,10 @@ export default function App() {
 
   const heroOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
   const contentOpacity = useTransform(scrollYProgress, [0.2, 0.5], [0, 1]);
-  const gooBlur = isMobile ? 36 : 48;
-  const gooMatrix = isMobile
-    ? "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 40 -8"
-    : "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 55 -12";
-  const glowDilate = isMobile ? 8 : 10;
-  const glowBlur = isMobile ? 32 : 42;
+  const gooBlur = isMobile ? MOBILE_GOO_BLUR : DESKTOP_GOO_BLUR;
+  const gooMatrix = isMobile ? MOBILE_GOO_MATRIX : DESKTOP_GOO_MATRIX;
+  const glowDilate = isMobile ? MOBILE_GLOW_DILATE : DESKTOP_GLOW_DILATE;
+  const glowBlur = isMobile ? MOBILE_GLOW_BLUR : DESKTOP_GLOW_BLUR;
 
   return (
     <div ref={containerRef} className="relative w-full bg-white">
@@ -469,17 +532,6 @@ export default function App() {
           style={{ opacity: heroOpacity }}
           className="absolute inset-0"
         >
-          <div className="absolute top-8 left-8 z-50">
-            <Button
-              onClick={() => window.location.reload()}
-              variant="outline"
-              className="bg-white/50 backdrop-blur"
-            >
-              <ArrowClockwise className="mr-2 h-4 w-4" />
-              Reset
-            </Button>
-          </div>
-
           <motion.div
             className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 mix-blend-difference"
             animate={{ y: [0, 10, 0] }}
@@ -500,7 +552,6 @@ export default function App() {
                 width="130%"
                 height="130%"
               >
-                {/* Goo merge: blobs all elements into one unified shape */}
                 <feGaussianBlur
                   in="SourceGraphic"
                   stdDeviation={gooBlur}
@@ -518,7 +569,6 @@ export default function App() {
                   operator="atop"
                   result="merged"
                 />
-                {/* Flatten to solid black: the goo alpha defines the unified shape */}
                 <feColorMatrix
                   in="merged"
                   type="matrix"
@@ -526,7 +576,6 @@ export default function App() {
                   result="blackShape"
                 />
 
-                {/* Inner glow: flood light outside the shape, blur inward, clip to shape */}
                 <feMorphology
                   in="blackShape"
                   operator="dilate"
@@ -564,7 +613,6 @@ export default function App() {
                   />
                 </feComponentTransfer>
 
-                {/* Unified specular sheen across the merged shape */}
                 <feGaussianBlur
                   in="blackShape"
                   stdDeviation="16"
@@ -583,7 +631,6 @@ export default function App() {
                   result="sheenMask"
                 />
 
-                {/* Stack: unified black shape, then inner glow + sheen on top */}
                 <feMerge>
                   <feMergeNode in="blackShape" />
                   <feMergeNode in="innerGlowSoft" />
@@ -613,11 +660,10 @@ export default function App() {
                 ballSize={ballSize}
                 segmentTs={segmentTs}
                 segmentVariance={segmentVariance}
+                isMobile={isMobile}
               />
             ))}
           </div>
-
-          {/* Specular highlights — separate unfiltered layer, only on main balls */}
           <div className="absolute inset-0 w-full h-full z-20 pointer-events-none">
             {gridItems.map((item) => (
               <BallSpecular
