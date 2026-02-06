@@ -12,7 +12,12 @@ export const artists = [
     instagram: "https://www.instagram.com/_julitalipinska_2004/",
   },
   { name: "Liam Walker", age: "25", description: "", instagram: "" },
-  { name: "Victoria Wright", age: "21", description: "", instagram: "" },
+  {
+    name: "Victoria Wright",
+    age: "21",
+    description: "",
+    instagram: "https://www.instagram.com/joyful_artist_uk",
+  },
   {
     name: "Ellie Seal",
     age: "21",
@@ -20,10 +25,25 @@ export const artists = [
       "Ellie Seal is a twenty one year old local artist. Her practice mainly consists of oil paint, sculpting, and dance. As influence to her own work, Seal finds inspiration from artists such as Hilma Af klint and Wassily Kandinsky. Seal's project addresses an expression of her insecurities and causes through dance. With abstract shapes and colours Seal will create pieces with movement and powerful expression.",
     instagram: "https://www.instagram.com/small_wheels20/",
   },
-  { name: "Freja Pearson", age: "20", description: "", instagram: "" },
+  {
+    name: "Freja Pearson",
+    age: "20",
+    description: "",
+    instagram: "https://www.instagram.com/freja_vict",
+  },
   { name: "Grace Chapman", age: "20", description: "", instagram: "" },
-  { name: "Megan Latham", age: "30 something", description: "", instagram: "" },
-  { name: "Lou Ives", age: "TBA", description: "", instagram: "" },
+  {
+    name: "Megan Latham",
+    age: "30 something",
+    description: "",
+    instagram: "https://www.instagram.com/meglathamart",
+  },
+  {
+    name: "Lou Ives",
+    age: "TBA",
+    description: "",
+    instagram: "https://www.instagram.com/luxylou1",
+  },
 ];
 
 export const slugifyArtist = (name: string) =>
