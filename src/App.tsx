@@ -1,19 +1,32 @@
-import { useEffect, useState, useRef, type ComponentProps } from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  type ComponentProps,
+  useMemo,
+} from "react";
 import {
   motion,
-  useMotionValue,
-  useTransform,
   useSpring,
   useScroll,
-  type MotionValue,
+  useTransform,
+  animate,
+  MotionValue,
 } from "framer-motion";
 import { cn } from "./lib/utils";
 import { ArrowClockwise, CaretDown } from "@phosphor-icons/react";
 
+const BALL_SIZE_DESKTOP = 150;
+const SPACING_DESKTOP = 340;
+const BALL_SIZE_MOBILE = 70;
+const SPACING_MOBILE = 180;
+const IDLE_AMPLITUDE = 60;
+const MOUSE_REPEL_STRENGTH = 2.5;
+
 const useResponsiveValues = () => {
   const [values, setValues] = useState({
-    spacing: 320,
-    ballSize: 280,
+    spacing: SPACING_DESKTOP,
+    ballSize: BALL_SIZE_DESKTOP,
     isMobile: false,
   });
 
@@ -21,24 +34,17 @@ const useResponsiveValues = () => {
     const updateValues = () => {
       const width = window.innerWidth;
       const isMobile = width < 768;
-      const isTablet = width >= 768 && width < 1024;
 
       if (isMobile) {
         setValues({
-          spacing: Math.min(width * 0.22, 120),
-          ballSize: Math.min(width * 0.28, 120),
+          spacing: Math.min(width * 0.45, SPACING_MOBILE),
+          ballSize: Math.min(width * 0.2, BALL_SIZE_MOBILE),
           isMobile: true,
-        });
-      } else if (isTablet) {
-        setValues({
-          spacing: 250,
-          ballSize: 200,
-          isMobile: false,
         });
       } else {
         setValues({
-          spacing: 320,
-          ballSize: 280,
+          spacing: SPACING_DESKTOP,
+          ballSize: BALL_SIZE_DESKTOP,
           isMobile: false,
         });
       }
@@ -74,123 +80,358 @@ const Button = ({ className, variant = "default", ...props }: ButtonProps) => {
 };
 
 interface BallProps {
-  x: number;
-  y: number;
-  mouseX: MotionValue<number>;
-  mouseY: MotionValue<number>;
+  x: MotionValue<number>;
+  y: MotionValue<number>;
   ballSize: number;
 }
 
-function Ball({ x, y, mouseX, mouseY, ballSize }: BallProps) {
-  const [randomDelay] = useState(() => Math.random() * 2);
-  const [randomOffset] = useState(() => ({
-    x: (Math.random() - 0.5) * 0.3,
-    y: (Math.random() - 0.5) * 0.3,
-  }));
+function Ball({ x, y, ballSize }: BallProps) {
+  const scaleX = useSpring(1, { stiffness: 400, damping: 15 });
+  const scaleY = useSpring(1, { stiffness: 400, damping: 15 });
 
-  const moveX = useTransform(mouseX, (mX: number) => {
-    if (typeof window === "undefined") return 0;
-    const screenX = window.innerWidth / 2 + x;
-    const diff = mX - screenX;
-    const dist = Math.sqrt(diff * diff);
-    const influence = Math.max(0, 1 - dist / 600);
-    return diff * influence * 0.25;
-  });
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
 
-  const moveY = useTransform(mouseY, (mY: number) => {
-    if (typeof window === "undefined") return 0;
-    const screenY = window.innerHeight / 2 + y;
-    const diff = mY - screenY;
-    const dist = Math.sqrt(diff * diff);
-    const influence = Math.max(0, 1 - dist / 600);
-    return diff * influence * 0.25;
-  });
+    const distortX = 1 + (clickX - centerX) / 100;
+    const distortY = 1 + (clickY - centerY) / 100;
+    scaleX.set(distortX);
+    scaleY.set(distortY);
+  };
 
-  const springConfig = { damping: 20, stiffness: 100 };
-  const springX = useSpring(moveX, springConfig);
-  const springY = useSpring(moveY, springConfig);
-
-  const isDiagonal =
-    (x < 0 && y < 0) || (x > 0 && y > 0) || (x === 0 && y === 0);
-  const diagonalVector = isDiagonal ? 1 : -1;
-
-  const isOrthogonal = (x === 0 && y !== 0) || (x !== 0 && y === 0);
-
-  const xMovement = isOrthogonal
-    ? 5 * diagonalVector * (1 + randomOffset.x)
-    : 12 * diagonalVector * (1 + randomOffset.x);
-  const yMovement = isOrthogonal
-    ? 8 * diagonalVector * (1 + randomOffset.y)
-    : 32 * diagonalVector * (1 + randomOffset.y);
+  const handlePointerLeave = () => {
+    scaleX.set(1);
+    scaleY.set(1);
+  };
 
   return (
     <motion.div
-      className="absolute rounded-full bg-black"
+      className="absolute rounded-full"
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
       style={{
-        x: springX,
-        y: springY,
         width: ballSize,
         height: ballSize,
-        left: `calc(50% + ${x}px - ${ballSize / 2}px)`,
-        top: `calc(50% + ${y}px - ${ballSize / 2}px)`,
-      }}
-      animate={{
-        x: [0, xMovement, 0],
-        y: [0, yMovement, 0],
-      }}
-      transition={{
-        // eslint-disable-next-line react-hooks/purity
-        duration: 5 + Math.random() * 2,
-        repeat: Infinity,
-        repeatType: "reverse",
-        ease: "easeInOut",
-        delay: randomDelay,
+        scaleX,
+        scaleY,
+        x,
+        y,
+        left: "50%",
+        top: "50%",
+        marginLeft: -ballSize / 2,
+        marginTop: -ballSize / 2,
+        backgroundColor: "#000000",
       }}
     />
   );
 }
 
+function BallSpecular({ x, y, ballSize }: BallProps) {
+  return (
+    <motion.div
+      className="absolute rounded-full pointer-events-none"
+      style={{
+        width: ballSize * 0.7,
+        height: ballSize * 0.7,
+        x,
+        y,
+        left: "50%",
+        top: "50%",
+        marginLeft: -(ballSize * 0.7) / 2,
+        marginTop: -(ballSize * 0.7) / 2,
+        background:
+          "radial-gradient(circle at 50% 50%, rgba(200,200,200,0.4) 0%, rgba(130,130,130,0.25) 22%, rgba(90,90,90,0.18) 48%, transparent 75%)",
+      }}
+    />
+  );
+}
+
+interface BridgeProps {
+  ax: MotionValue<number>;
+  ay: MotionValue<number>;
+  bx: MotionValue<number>;
+  by: MotionValue<number>;
+  mouseX: MotionValue<number>;
+  mouseY: MotionValue<number>;
+  ballSize: number;
+  segmentTs: number[];
+  segmentVariance: number[];
+}
+
+interface BridgeSegmentProps {
+  ax: MotionValue<number>;
+  ay: MotionValue<number>;
+  bx: MotionValue<number>;
+  by: MotionValue<number>;
+  mouseX: MotionValue<number>;
+  mouseY: MotionValue<number>;
+  t: number;
+  sizeVariance: number;
+  ballSize: number;
+  opacity: MotionValue<number>;
+}
+
+function BridgeSegment({
+  ax,
+  ay,
+  bx,
+  by,
+  mouseX,
+  mouseY,
+  t,
+  sizeVariance,
+  ballSize,
+  opacity,
+}: BridgeSegmentProps) {
+  const segX = useTransform([ax, bx], ([a, b]: number[]) => a + (b - a) * t);
+  const segY = useTransform([ay, by], ([a, b]: number[]) => a + (b - a) * t);
+
+  const tFromCenter = Math.abs(2 * t - 1);
+  // Stringier taper: slightly thicker center so bridges connect
+  const centerBoost = 0.06 * (1 - tFromCenter);
+  const taper = 0.1 + 0.4 * Math.pow(tFromCenter, 0.7) + centerBoost;
+  const size = ballSize * taper * sizeVariance;
+
+  const bridgeDx = useTransform([ax, bx], ([a, b]: number[]) => b - a);
+  const bridgeDy = useTransform([ay, by], ([a, b]: number[]) => b - a);
+  const bridgeLen = useTransform([bridgeDx, bridgeDy], ([dx, dy]: number[]) =>
+    Math.max(1, Math.sqrt(dx * dx + dy * dy)),
+  );
+  const normalX = useTransform(
+    [bridgeDy, bridgeLen],
+    ([dy, len]: number[]) => -dy / len,
+  );
+  const normalY = useTransform(
+    [bridgeDx, bridgeLen],
+    ([dx, len]: number[]) => dx / len,
+  );
+  const mouseForce = useTransform(
+    [segX, segY, mouseX, mouseY],
+    ([sx, sy, mx, my]: number[]) => {
+      const dx = mx - sx;
+      const dy = my - sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return Math.max(0, 1 - dist / 500);
+    },
+  );
+  const offsetMag = useTransform(mouseForce, (f: number) => f * 18);
+  const offsetX = useTransform(
+    [normalX, offsetMag],
+    ([nx, mag]: number[]) => nx * mag,
+  );
+  const offsetY = useTransform(
+    [normalY, offsetMag],
+    ([ny, mag]: number[]) => ny * mag,
+  );
+  const finalX = useTransform([segX, offsetX], ([sx, ox]: number[]) => sx + ox);
+  const finalY = useTransform([segY, offsetY], ([sy, oy]: number[]) => sy + oy);
+
+  return (
+    <motion.div
+      className="absolute rounded-full pointer-events-none"
+      style={{
+        width: size,
+        height: size,
+        x: finalX,
+        y: finalY,
+        left: "50%",
+        top: "50%",
+        marginLeft: -size / 2,
+        marginTop: -size / 2,
+        opacity,
+        backgroundColor: "#000000",
+      }}
+    />
+  );
+}
+
+function DiagonalBridge({
+  ax,
+  ay,
+  bx,
+  by,
+  mouseX,
+  mouseY,
+  ballSize,
+  segmentTs,
+  segmentVariance,
+}: BridgeProps) {
+  const distance = useTransform(
+    [ax, ay, bx, by],
+    ([axv, ayv, bxv, byv]: number[]) => {
+      const ddx = bxv - axv;
+      const ddy = byv - ayv;
+      return Math.sqrt(ddx * ddx + ddy * ddy);
+    },
+  );
+
+  const opacity = useTransform(distance, [300, 900], [1, 0]);
+
+  return (
+    <>
+      {segmentTs.map((t, i) => (
+        <BridgeSegment
+          key={i}
+          ax={ax}
+          ay={ay}
+          bx={bx}
+          by={by}
+          mouseX={mouseX}
+          mouseY={mouseY}
+          t={t}
+          sizeVariance={segmentVariance[i]}
+          ballSize={ballSize}
+          opacity={opacity}
+        />
+      ))}
+    </>
+  );
+}
+
+interface GridItem {
+  id: number;
+  ix: number;
+  iy: number;
+  x: MotionValue<number>;
+  y: MotionValue<number>;
+  baseX: number;
+  baseY: number;
+}
+
+const GRID_COORDS = [
+  { id: 1, ix: -1, iy: -1 },
+  { id: 2, ix: 0, iy: -1 },
+  { id: 3, ix: 1, iy: -1 },
+  { id: 4, ix: -1, iy: 0 },
+  { id: 5, ix: 0, iy: 0 },
+  { id: 6, ix: 1, iy: 0 },
+  { id: 7, ix: -1, iy: 1 },
+  { id: 8, ix: 0, iy: 1 },
+  { id: 9, ix: 1, iy: 1 },
+];
+
+function useGridItems(spacing: number) {
+  const items = useMemo<GridItem[]>(() => {
+    return GRID_COORDS.map((pos) => ({
+      ...pos,
+      x: new MotionValue(pos.ix * spacing),
+      y: new MotionValue(pos.iy * spacing),
+      baseX: pos.ix * spacing,
+      baseY: pos.iy * spacing,
+    }));
+  }, []);
+
+  useEffect(() => {
+    items.forEach((item) => {
+      item.baseX = item.ix * spacing;
+      item.baseY = item.iy * spacing;
+    });
+  }, [spacing, items]);
+
+  return items;
+}
+
 export default function App() {
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll();
-  const { spacing, ballSize } = useResponsiveValues();
+  const { spacing, ballSize, isMobile } = useResponsiveValues();
   const [hasScrolled, setHasScrolled] = useState(false);
+  const mouseX = useSpring(0, { stiffness: 120, damping: 20 });
+  const mouseY = useSpring(0, { stiffness: 120, damping: 20 });
 
-  const GRID_POSITIONS = [
-    { id: 1, x: -spacing, y: -spacing },
-    { id: 2, x: 0, y: -spacing },
-    { id: 3, x: spacing, y: -spacing },
-    { id: 4, x: -spacing, y: 0 },
-    { id: 5, x: 0, y: 0 },
-    { id: 6, x: spacing, y: 0 },
-    { id: 7, x: -spacing, y: spacing },
-    { id: 8, x: 0, y: spacing },
-    { id: 9, x: spacing, y: spacing },
-  ];
+  const segmentCount = isMobile ? 34 : 24;
+  const segmentTs = useMemo(() => {
+    const step = 1 / (segmentCount + 1);
+    return Array.from({ length: segmentCount }, (_, i) =>
+      Number((step * (i + 1)).toFixed(4)),
+    );
+  }, [segmentCount]);
+  const segmentVariance = useMemo(
+    () => segmentTs.map(() => 0.97 + Math.random() * 0.06),
+    [segmentTs],
+  );
+
+  const gridItems = useGridItems(spacing);
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseX.set(e.clientX);
-      mouseY.set(e.clientY);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const controls: any[] = [];
+
+    gridItems.forEach((item) => {
+      const animateIdle = () => {
+        const randomX = item.baseX + (Math.random() - 0.5) * IDLE_AMPLITUDE;
+        const randomY = item.baseY + (Math.random() - 0.5) * IDLE_AMPLITUDE;
+
+        const duration = 2 + Math.random() * 3;
+
+        const cx = animate(item.x, randomX, { duration, ease: "easeInOut" });
+        const cy = animate(item.y, randomY, { duration, ease: "easeInOut" });
+
+        controls.push(cx);
+        controls.push(cy);
+
+        cx.then(() => {
+          if (controls.includes(cx)) animateIdle();
+        });
+      };
+
+      animateIdle();
+    });
+
+    const handleMove = (e: MouseEvent) => {
+      const mx = e.clientX - window.innerWidth / 2;
+      const my = e.clientY - window.innerHeight / 2;
+
+      mouseX.set(mx);
+      mouseY.set(my);
+
+      gridItems.forEach((item) => {
+        const dx = mx - item.x.get();
+        const dy = my - item.y.get();
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 500) {
+          const force = (500 - dist) * MOUSE_REPEL_STRENGTH;
+          item.x.set(item.x.get() - (dx / dist) * force * 0.05);
+          item.y.set(item.y.get() - (dy / dist) * force * 0.05);
+        }
+      });
     };
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        mouseX.set(e.touches[0].clientX);
-        mouseY.set(e.touches[0].clientY);
-      }
-    };
+    window.addEventListener("mousemove", handleMove);
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("touchmove", handleTouchMove);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("touchmove", handleTouchMove);
+      controls.forEach((c) => c.stop());
+      window.removeEventListener("mousemove", handleMove);
     };
-  }, [mouseX, mouseY]);
+  }, [gridItems, mouseX, mouseY]);
+
+  const bridges = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pairs: any[] = [];
+    for (let i = 0; i < gridItems.length; i++) {
+      for (let j = i + 1; j < gridItems.length; j++) {
+        const p1 = gridItems[i];
+        const p2 = gridItems[j];
+
+        const dx = p2.ix - p1.ix;
+        const dy = p2.iy - p1.iy;
+
+        if (dx === 1 && dy === 1) {
+          pairs.push({
+            id: `bridge-${p1.id}-${p2.id}`,
+            p1,
+            p2,
+          });
+        }
+      }
+    }
+    return pairs;
+  }, [gridItems]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -199,16 +440,28 @@ export default function App() {
         contentRef.current?.scrollIntoView({ behavior: "smooth" });
       }
     };
-
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasScrolled]);
 
   const heroOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
   const contentOpacity = useTransform(scrollYProgress, [0.2, 0.5], [0, 1]);
+  const gooBlur = isMobile ? 36 : 48;
+  const gooMatrix = isMobile
+    ? "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 40 -8"
+    : "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 55 -12";
+  const glowDilate = isMobile ? 8 : 10;
+  const glowBlur = isMobile ? 32 : 42;
 
   return (
     <div ref={containerRef} className="relative w-full bg-white">
+      <style>{`
+        @font-face {
+          font-family: 'Gunplay';
+          src: url('/gunplay rg.otf') format('opentype');
+        }
+      `}</style>
+
       <div className="grain-overlay" />
 
       <div className="relative w-full h-screen bg-white isolate overflow-hidden">
@@ -240,100 +493,137 @@ export default function App() {
 
           <svg className="hidden">
             <defs>
-              <filter id="soft-goop">
+              <filter
+                id="smart-goo"
+                x="-15%"
+                y="-15%"
+                width="130%"
+                height="130%"
+              >
+                {/* Goo merge: blobs all elements into one unified shape */}
                 <feGaussianBlur
                   in="SourceGraphic"
-                  stdDeviation="48"
+                  stdDeviation={gooBlur}
                   result="blur"
                 />
                 <feColorMatrix
                   in="blur"
                   mode="matrix"
-                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 36 -13"
+                  values={gooMatrix}
                   result="goo"
                 />
+                <feComposite
+                  in="SourceGraphic"
+                  in2="goo"
+                  operator="atop"
+                  result="merged"
+                />
+                {/* Flatten to solid black: the goo alpha defines the unified shape */}
+                <feColorMatrix
+                  in="merged"
+                  type="matrix"
+                  values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                  result="blackShape"
+                />
 
+                {/* Inner glow: flood light outside the shape, blur inward, clip to shape */}
                 <feMorphology
-                  operator="erode"
-                  radius="38"
-                  in="goo"
-                  result="eroded"
+                  in="blackShape"
+                  operator="dilate"
+                  radius={glowDilate}
+                  result="expandedShape"
                 />
-
-                <feGaussianBlur
-                  in="eroded"
-                  stdDeviation="18"
-                  result="innerBlur1"
-                />
-                <feColorMatrix
-                  in="innerBlur1"
-                  mode="matrix"
-                  values="0 0 0 0 0.5   0 0 0 0 0.5   0 0 0 0 0.5  0 0 0 0.4 0"
-                  result="innerGrey1"
-                />
-
-                <feGaussianBlur
-                  in="eroded"
-                  stdDeviation="12"
-                  result="innerBlur2"
-                />
-                <feColorMatrix
-                  in="innerBlur2"
-                  mode="matrix"
-                  values="0 0 0 0 0.5   0 0 0 0 0.5   0 0 0 0 0.5  0 0 0 0.6 0"
-                  result="innerGrey2"
-                />
-
-                <feGaussianBlur
-                  in="eroded"
-                  stdDeviation="6"
-                  result="innerBlur3"
-                />
-                <feColorMatrix
-                  in="innerBlur3"
-                  mode="matrix"
-                  values="0 0 0 0 0.5   0 0 0 0 0.5   0 0 0 0 0.5  0 0 0 0.8 0"
-                  result="innerGrey3"
-                />
-
-                <feFlood floodColor="#000000" result="flood" />
-                <feComposite in="flood" in2="goo" operator="in" result="body" />
-
-                <feComposite
-                  in="innerGrey1"
-                  in2="body"
-                  operator="atop"
-                  result="layer1"
+                <feFlood
+                  floodColor="#9a9a9a"
+                  floodOpacity="0.45"
+                  result="flood"
                 />
                 <feComposite
-                  in="innerGrey2"
-                  in2="layer1"
-                  operator="atop"
-                  result="layer2"
+                  in="flood"
+                  in2="expandedShape"
+                  operator="out"
+                  result="outside"
+                />
+                <feGaussianBlur
+                  in="outside"
+                  stdDeviation={glowBlur}
+                  result="glowBlur"
                 />
                 <feComposite
-                  in="innerGrey3"
-                  in2="layer2"
-                  operator="atop"
-                  result="final"
+                  in="glowBlur"
+                  in2="expandedShape"
+                  operator="in"
+                  result="innerGlow"
+                />
+                <feComponentTransfer in="innerGlow" result="innerGlowSoft">
+                  <feFuncA
+                    type="gamma"
+                    amplitude="1"
+                    exponent="1.6"
+                    offset="0"
+                  />
+                </feComponentTransfer>
+
+                {/* Unified specular sheen across the merged shape */}
+                <feGaussianBlur
+                  in="blackShape"
+                  stdDeviation="16"
+                  result="sheenBlur"
+                />
+                <feColorMatrix
+                  in="sheenBlur"
+                  type="matrix"
+                  values="0 0 0 0 0.65  0 0 0 0 0.65  0 0 0 0 0.65  0 0 0 0.25 0"
+                  result="sheen"
+                />
+                <feComposite
+                  in="sheen"
+                  in2="blackShape"
+                  operator="in"
+                  result="sheenMask"
                 />
 
-                <feComposite in="final" in2="goo" operator="atop" />
+                {/* Stack: unified black shape, then inner glow + sheen on top */}
+                <feMerge>
+                  <feMergeNode in="blackShape" />
+                  <feMergeNode in="innerGlowSoft" />
+                  <feMergeNode in="sheenMask" />
+                </feMerge>
               </filter>
             </defs>
           </svg>
 
           <div
             className="absolute inset-0 w-full h-full z-10"
-            style={{ filter: "url(#soft-goop)" }}
+            style={{ filter: "url(#smart-goo)" }}
           >
-            {GRID_POSITIONS.map((pos) => (
-              <Ball
-                key={pos.id}
-                x={pos.x}
-                y={pos.y}
+            {gridItems.map((item) => (
+              <Ball key={item.id} x={item.x} y={item.y} ballSize={ballSize} />
+            ))}
+
+            {bridges.map((bridge) => (
+              <DiagonalBridge
+                key={bridge.id}
+                ax={bridge.p1.x}
+                ay={bridge.p1.y}
+                bx={bridge.p2.x}
+                by={bridge.p2.y}
                 mouseX={mouseX}
                 mouseY={mouseY}
+                ballSize={ballSize}
+                segmentTs={segmentTs}
+                segmentVariance={segmentVariance}
+              />
+            ))}
+          </div>
+
+          {/* Specular highlights — separate unfiltered layer, only on main balls */}
+          <div className="absolute inset-0 w-full h-full z-20 pointer-events-none">
+            {gridItems.map((item) => (
+              <BallSpecular
+                key={`spec-${item.id}`}
+                x={item.x}
+                y={item.y}
                 ballSize={ballSize}
               />
             ))}
@@ -342,8 +632,10 @@ export default function App() {
 
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 mix-blend-difference">
           <h1
-            className="text-[12vw] md:text-[10vw] lg:text-[12vw] font-bold tracking-tighter leading-none select-none text-white"
-            style={{ fontFamily: '"Saira Stencil One", sans-serif' }}
+            className="text-[15vw] font-bold leading-none select-none text-white tracking-[0.5em]"
+            style={{
+              fontFamily: "Gunplay, sans-serif",
+            }}
           >
             NINE
           </h1>
@@ -361,18 +653,6 @@ export default function App() {
           </h2>
           <p className="text-lg md:text-xl text-neutral-700 mb-6">
             This is placeholder content that appears when you scroll down.
-          </p>
-          <p className="text-base md:text-lg text-neutral-600 mb-6">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
-            eiusmod tempor incididunt ut labore et dolore magna aliqua.
-          </p>
-          <p className="text-base md:text-lg text-neutral-600 mb-6">
-            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
-            nisi ut aliquip ex ea commodo consequat.
-          </p>
-          <p className="text-base md:text-lg text-neutral-600">
-            Duis aute irure dolor in reprehenderit in voluptate velit esse
-            cillum dolore eu fugiat nulla pariatur.
           </p>
         </div>
       </motion.div>
