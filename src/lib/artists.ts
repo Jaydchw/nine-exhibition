@@ -2,7 +2,8 @@ export const artists = [
   {
     name: "Gabriella Daugintyte",
     age: "20",
-    description: "",
+    description:
+      "Gabriele Daugintyte is a 21 year old local artist. Her previous work thematically explores architecture through time, using transfer emulsion, to draw attention impermanence. Daugintyte’s current project investigates sonder - the awareness that every individual has a rich, unseen life just as our own. Influenced by Henri Cartier-Bresson’s focus on observation and the decisive moment, Daugintyte’s developed works continue to encourage close observation on the overlooked moments and subtle traces of presence.",
     instagram: "https://www.instagram.com/gabriele_d_/",
   },
   {
