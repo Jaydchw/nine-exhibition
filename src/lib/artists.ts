@@ -9,7 +9,8 @@ export const artists = [
   {
     name: "Julita Lipinska",
     age: "21",
-    description: "",
+    description:
+      "Julita’s work focuses on the ever-changing relationship and perceptions of tattooing within our society and culture by highlighting tattooing as a form of art rather than body modification and translating the secret language of tattooing. Julita blurs the boundaries between tattooing and fine art opening up the conversation of “what is art?” Often inspired by artists like Aubrey Beardsley who focus on all things magical, mythological and grotesque.",
     instagram: "https://www.instagram.com/_julitalipinska_2004/",
   },
   {
@@ -36,7 +37,8 @@ export const artists = [
   {
     name: "Freja Pearson",
     age: "20",
-    description: "",
+    description:
+      "Freja Pearson has had a lifelong passion for art from a young age, she's been drawn to the creative process, finding joy through various mediums. While she has always gravitated toward painting with acrylics and printmaking, her work reflects a constant exploration of different forms of expression, recently drifting towards an interest in ceramics; exploring tactile art through a fusion of ceramics and painting, drawing on natural themes and organic forms to create richly textured, sensory-driven pieces. For this artist, creating is a journey, one that constantly pushes her to grow and discover new possibilities. ",
     instagram: "https://www.instagram.com/freja_vict",
   },
   {
