@@ -57,8 +57,9 @@ export const artists = [
   },
   {
     name: "Lou Ives",
-    age: "TBA",
-    description: "",
+    age: "35",
+    description:
+      "Louise's work focuses on print making showing different areas in her life that shows meaning and emotion. Louise is inspired by artists like Rembrandt and Francisco Goua. Louise's project focuses on confidence, empowerment and burlesque. Been a burlesque dancer Louise is a strong believer of women empowerment and not to be seen as objects.",
     instagram: "https://www.instagram.com/luxylou1",
   },
 ];
