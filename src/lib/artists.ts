@@ -25,7 +25,7 @@ export const artists = [
     age: "38",
     description:
       "Victoria's work focuses on how we view themes such as mental health, emotions, and identity through the use of illusions. As someone with personal experiences of anxiety, emotional issues, and identity, Victoria knows that the emotions a person shows often do not match what people see. Victoria's art encourages viewers to question what they actually perceive when visually looking at the artwork. Victoria is inspired by artists such as Giuseppe Arcimboldo, Victor Vasarely, and contemporary artist Patrick Seymour. Her goal is to raise awareness of mental health, identity, and emotional struggles.",
-    instagram: "https://www.instagram.com/joyful_artist_uk",
+    instagram: "https://www.instagram.com/victoriaexploresart/",
   },
   {
     name: "Ellie Seal",
