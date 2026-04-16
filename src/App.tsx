@@ -8,7 +8,7 @@ import {
   MotionValue,
   type AnimationPlaybackControls,
 } from "framer-motion";
-import { CalendarPlus, CaretDown } from "@phosphor-icons/react";
+import { CalendarPlus, CaretDown, Heart, Gift } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { artistsWithSlugs } from "./lib/artists";
 import ActionButton from "./components/ActionButton";
@@ -890,6 +890,78 @@ export default function App() {
             us at Hull College <span className="font-semibold">HU1 3DG</span> on
             the <span className="font-semibold">11th June 5:30</span>.
           </p>
+
+          <div className="mb-10">
+            <motion.a
+              href="https://monzo.me/meganlatham12?h=OUVsx6&account_type=personal"
+              target="_blank"
+              rel="noopener noreferrer"
+              initial={false}
+              whileHover="hover"
+              whileTap="tap"
+              className="relative flex items-center justify-between w-full overflow-hidden border-2 border-[#c0392b] bg-[#c0392b] text-white px-5 py-4 font-semibold uppercase tracking-[0.18em] text-sm cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c0392b]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f7f4ef] no-underline group"
+              style={{ WebkitTapHighlightColor: "transparent" }}
+            >
+              {/* Sweep fill on hover */}
+              <motion.span
+                aria-hidden
+                className="absolute inset-0 bg-white"
+                variants={{
+                  hover: { scaleX: 1, originX: 0 },
+                  tap: { scaleX: 1, originX: 0 },
+                }}
+                initial={{ scaleX: 0, originX: 0 }}
+                transition={{ duration: 0.35, ease: [0.76, 0, 0.24, 1] }}
+              />
+
+              {/* Left: pound icon + label */}
+              <span className="relative flex items-center gap-3">
+                <motion.span
+                  variants={{
+                    hover: { rotate: [0, -20, 15, -10, 0], transition: { duration: 0.5, ease: "easeInOut" } },
+                    tap:   { scale: 0.85 },
+                  }}
+                  className="inline-flex"
+                >
+                  <Gift size={20} weight="bold" />
+                </motion.span>
+                <motion.span
+                  variants={{
+                    hover: { color: "#c0392b" },
+                    tap:   { color: "#c0392b" },
+                  }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <span className="sm:hidden">Support Us</span>
+                  <span className="hidden sm:inline">Support the Exhibition</span>
+                </motion.span>
+              </span>
+
+              {/* Right: heart icon */}
+              <motion.span
+                className="relative inline-flex items-center gap-1.5"
+                variants={{
+                  hover: { color: "#c0392b" },
+                  tap:   { color: "#c0392b" },
+                }}
+                transition={{ duration: 0.2 }}
+              >
+                <motion.span
+                  variants={{
+                    hover: {
+                      scale: [1, 1.5, 0.9, 1.3, 1],
+                      transition: { duration: 0.55, ease: "easeInOut" },
+                    },
+                    tap: { scale: 0.75 },
+                  }}
+                  className="inline-flex"
+                >
+                  <Heart size={18} weight="fill" />
+                </motion.span>
+                <span className="tracking-[0.2em] text-xs">Donate</span>
+              </motion.span>
+            </motion.a>
+          </div>
 
           <h3 className="text-2xl md:text-3xl font-black uppercase tracking-widest mb-5">
             Meet the Artists
